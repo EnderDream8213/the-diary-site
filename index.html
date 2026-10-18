@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Notebook Cloud Workspace</title>
+    <style>
+        :root {
+            --bg-workspace: #121212;
+            --bg-panel: #1e1e1e;
+            --bg-active: #2d2d2d;
+            --text-main: #e0e0e0;
+            --accent-purple: #bb86fc;
+            --accent-teal: #03dac6;
+            --border-color: #333333;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-workspace);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+        /* Sidebar Layout Configuration */
+        .sidebar {
+            width: 260px;
+            background-color: var(--bg-panel);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 20px 10px;
+            box-sizing: border-box;
+        }
+        .sidebar h2 {
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--accent-purple);
+            margin: 0 0 20px 10px;
+        }
+        .btn-create {
+            background-color: transparent;
+            color: var(--accent-teal);
+            border: 1px dashed var(--accent-teal);
+            padding: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-bottom: 20px;
+            transition: all 0.2s ease;
+        }
+        .btn-create:hover {
+            background-color: rgba(3, 218, 198, 0.1);
+        }
+        .notebook-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .notebook-item {
+            padding: 12px;
+            background-color: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: left;
+            color: var(--text-main);
+            font-size: 0.95rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .notebook-item:hover {
+            background-color: rgba(255,255,255,0.05);
+        }
+        .notebook-item.active {
+            background-color: var(--bg-active);
+            border-color: var(--accent-purple);
+        }
+        /* Workspace Typing Engine Layout */
+        .editor-workspace {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 30px;
+            box-sizing: border-box;
+            background-color: var(--bg-workspace);
+        }
+        .placeholder-notice {
+            margin: auto;
+            text-align: center;
+            color: #666;
+            font-size: 1.2rem;
+        }
+        .notebook-title-input {
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid var(--border-color);
+            color: #fff;
+            font-size: 1.8rem;
+            font-weight: bold;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            width: 100%;
+            outline: none;
+        }
+        .notebook-title-input:focus {
+            border-bottom-color: var(--accent-purple);
+        }
+        .text-editor-core {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-main);
+            font-size: 1.1rem;
+            line-height: 1.6;
+            resize: none;
+            outline: none;
+            width: 100%;
+            font-family: inherit;
+        }
+        .autosave-status {
+            text-align: right;
+            font-size: 0.8rem;
+            color: #777;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Left Panel Control Array -->
+    <div class="sidebar">
+        <h2>Notebook Hub</h2>
+        <button class="btn-create" onclick="createNewNotebook()">➕ New Notebook</button>
+        <div class="notebook-list" id="notebookListContainer"></div>
+    </div>
+
+    <!-- Active Text Composition Core Container -->
+    <div class="editor-workspace" id="editorWorkspace">
+        <div class="placeholder-notice" id="placeholderNotice">
+            📭 Select or create a text notebook to start typing...
+        </div>
+        <div id="activeEditorFields" style="display: none; height: 100%; flex-direction: column;">
+            <input type="text" class="notebook-title-input" id="notebookTitle" oninput="updateActiveNotebookData()" placeholder="Untitled Notebook">
+            <textarea class="text-editor-core" id="notebookBody" oninput="updateActiveNotebookData()" placeholder="Start typing raw words here... Text saves inside the local storage cache automatically."></textarea>
+            <div class="autosave-status" id="saveIndicator">Saved locally</div>
+        </div>
+    </div>
+
+    <script>
+        // Data State Array Management Object
+        let state = {
+            notebooks: [],
+            activeId: null
+        };
+
+        // Core Initialization Logic Routine
+        window.addEventListener('DOMContentLoaded', () => {
+            const preservedData = localStorage.getItem('word_notebook_workspace');
+            if (preservedData) {
+                try {
+                    state = JSON.parse(preservedData);
+                } catch (e) {
+                    console.error("Storage corrupted, setting baseline parameters.");
+                }
+            }
+            renderSidebarInterface();
+            if (state.activeId) {
+                loadSelectedNotebookWorkspace(state.activeId);
+            }
+        });
+
+        // Notebook Element Factory Constructor Instantiation Task
+        function createNewNotebook() {
+            const uniqueId = 'nb_' + Date.now();
+            const newNotebookEntry = {
+                id: uniqueId,
+                title: 'Notebook ' + (state.notebooks.length + 1),
+                content: ''
+            };
+            state.notebooks.push(newNotebookEntry);
+            state.activeId = uniqueId;
+            saveStateToLocalStorage();
+            renderSidebarInterface();
+            loadSelectedNotebookWorkspace(uniqueId);
+        }
+
+        // Sidebar Redraw Vector Render Implementation 
+        function renderSidebarInterface() {
+            const listContainer = document.getElementById('notebookListContainer');
+            listContainer.innerHTML = '';
+            
+            state.notebooks.forEach(notebook => {
+                const itemButton = document.createElement('button');
+                itemButton.className = `notebook-item ${notebook.id === state.activeId ? 'active' : ''}`;
+                itemButton.innerText = notebook.title || 'Untitled Notebook';
+                itemButton.onclick = () => loadSelectedNotebookWorkspace(notebook.id);
+                listContainer.appendChild(itemButton);
+            });
+        }
+
+        // Active Workspace Workspace State Selector Transition Function
+        function loadSelectedNotebookWorkspace(id) {
+            state.activeId = id;
+            const targetNotebook = state.notebooks.find(nb => nb.id === id);
+            
+            if (!targetNotebook) {
+                document.getElementById('placeholderNotice').style.display = 'block';
+                document.getElementById('activeEditorFields').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('placeholderNotice').style.display = 'none';
+            document.getElementById('activeEditorFields').style.display = 'flex';
+
+            document.getElementById('notebookTitle').value = targetNotebook.title;
+            document.getElementById('notebookBody').value = targetNotebook.content;
+            
+            renderSidebarInterface();
+            saveStateToLocalStorage();
+        }
+
+        // Core Text Engine Serialization Data Pipeline
+        function updateActiveNotebookData() {
+            if (!state.activeId) return;
+            
+            const activeNotebook = state.notebooks.find(nb => nb.id === state.activeId);
+            if (activeNotebook) {
+                const inputTitle = document.getElementById('notebookTitle').value;
+                activeNotebook.title = inputTitle;
+                activeNotebook.content = document.getElementById('notebookBody').value;
+                
+                // Track state dynamic modification locally inside document hierarchy
+                const activeSidebarElement = document.querySelector('.notebook-item.active');
+                if (activeSidebarElement) {
+                    activeSidebarElement.innerText = inputTitle || 'Untitled Notebook';
+                }
+                
+                triggerSaveNotification();
+                saveStateToLocalStorage();
+            }
+        }
+
+        // Storage Write Subsystem Driver
+        function saveStateToLocalStorage() {
+            localStorage.setItem('word_notebook_workspace', JSON.stringify(state));
+        }
+
+        // Save Status Visual Notification Logic UI Component
+        let saveCooldownTimer;
+        function triggerSaveNotification() {
+            const textNotice = document.getElementById('saveIndicator');
+            textNotice.innerText = 'Typing...';
+            clearTimeout(saveCooldownTimer);
+            saveCooldownTimer = setTimeout(() => {
+                textNotice.innerText = 'Saved to browser cache';
+            }, 500);
+        }
+    </script>
+</body>
+</html>
